@@ -48,6 +48,10 @@ class CameraClient:
                 if self.ws and self.ws.connected:
                     result = self.ws.recv()
                     detections = json.loads(result)
+                    if detections and isinstance(detections, list) and 'start_time' in detections[0]:
+                        now = time.time()
+                        latency_ms = (now - detections[0]['start_time']) * 1000.0
+                        print(f"Latency: {latency_ms:.2f} ms")
                     with self.lock:
                         self.detections.append(detections)
             except Exception as e:
@@ -140,5 +144,5 @@ class CameraClient:
             cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    client = CameraClient("ws://localhost:8000/ws")
+    client = CameraClient("ws://ai-server.yukebrillianth.my.id/ws")
     client.run()

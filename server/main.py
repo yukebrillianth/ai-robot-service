@@ -73,13 +73,16 @@ async def websocket_endpoint(websocket: WebSocket):
                         conf = float(box.conf[0].cpu().numpy())
                         label = model.names[cls]
                         
+                        start_time = time.time()
+                        
                         detections.append({
                             "label": label,
                             "confidence": conf,
                             "x": x,
                             "y": y,
                             "w": w,
-                            "h": h
+                            "h": h,
+                            "start_time": start_time
                         })
             
             # Send results back to client
