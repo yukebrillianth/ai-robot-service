@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+websockets
+websocket-client
+opencv-python
+numpy
+torch
+ultralytics
+pydantic
