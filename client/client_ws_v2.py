@@ -1,27 +1,24 @@
+import base64
 import json
-import struct
 import threading
 import time
 from collections import deque
 
 import cv2
-from websocket import ABNF, WebSocket
+from websocket import WebSocket
 
 
 class CameraClient:
     def __init__(
         self,
         server_url,
-        capture_index=0,
+        capture_index=2,
         display_fps=30,
         send_fps=10,
-        width=320,
-        height=240,
-        jpeg_quality=50,
-        motion_threshold=4.0,   # persen perbedaan piksel untuk kirim
-        min_quality=20,
-        max_quality=80,
-        motion_downscale=(160, 120),  # ukuran untuk kalkulasi motion (lebih kecil => lebih cepat)
+        width=640,
+        height=480,
+        jpeg_quality=60,
+        motion_threshold=4.0  # persen perbedaan piksel untuk kirim
     ):
         self.server_url = server_url
         self.capture_index = capture_index
@@ -30,23 +27,20 @@ class CameraClient:
         self.resize_w = width
         self.resize_h = height
         self.jpeg_quality = jpeg_quality
-        self.min_quality = min_quality
-        self.max_quality = max_quality
         self.motion_threshold = motion_threshold
-        self.motion_downscale = motion_downscale
 
         self.ws = None
         self.cap = None
+
         self.detections = deque(maxlen=1)
         self.detections_lock = threading.Lock()
-        self.latest_frame = None          # frame terakhir (resized) untuk dikirim (BGR)
-        self.latest_frame_lock = threading.Lock()
-        self.prev_sent_gray_small = None  # untuk motion detection di ukuran kecil
-        self.running = False
 
-        # stats untuk adaptasi kualitas
-        self.send_time_ema = None
-        self.ema_alpha = 0.2
+        self.latest_frame = None          # frame terakhir (resized) untuk dikirim
+        self.latest_frame_lock = threading.Lock()
+
+        self.prev_sent_gray = None        # untuk motion detection sederhana
+
+        self.running = False
 
     def connect(self):
         try:
@@ -60,38 +54,18 @@ class CameraClient:
             return False
 
     def start_camera(self):
-        # Untuk Raspi, pertimbangkan pakai libcamera / PiCamera untuk performa lebih baik
         self.cap = cv2.VideoCapture(self.capture_index)
         if not self.cap.isOpened():
             print("Failed to open camera")
             return False
-        # kecilkan buffer capture pada beberapa driver jika perlu:
-        try:
-            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        except Exception:
-            pass
         return True
 
-    def encode_frame_bytes(self, frame_bgr, quality):
-        # frame_bgr: BGR resized sesuai self.resize_w/self.resize_h
-        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)]
-        ok, buffer = cv2.imencode('.jpg', frame_bgr, encode_param)
+    def encode_frame(self, frame):
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
+        ok, buffer = cv2.imencode('.jpg', frame, encode_param)
         if not ok:
             return None
-        return buffer.tobytes()
-
-    def _build_payload(self, jpeg_bytes):
-        # Format: 4-byte BE header_length + header_json + jpeg_bytes
-        meta = {
-            "width": self.resize_w,
-            "height": self.resize_h,
-            "format": "jpeg",
-            "jpeg_quality": int(self.jpeg_quality),
-            "start_time": time.time()
-        }
-        header = json.dumps(meta).encode('utf-8')
-        prefix = struct.pack('>I', len(header))
-        return prefix + header + jpeg_bytes
+        return base64.b64encode(buffer).decode('utf-8')
 
     def receive_detections(self):
         while self.running:
@@ -100,21 +74,15 @@ class CameraClient:
                     try:
                         result = self.ws.recv()
                     except Exception:
-                        continue  # timeout / socket issue
-                    # Ditempatkan asumsinya server mengirim JSON teks untuk detections
-                    try:
-                        detections = json.loads(result)
-                        if (detections and isinstance(detections, list)
-                                and 'start_time' in detections[0]):
-                            now = time.time()
-                            latency_ms = (now - detections[0]['start_time']) * 1000.0
-                            print(f"Latency: {latency_ms:.2f} ms")
-                        with self.detections_lock:
-                            self.detections.append(detections)
-                    except Exception as e:
-                        # jika bukan JSON, abaikan atau tampilkan debug
-                        # print("Non-JSON message:", e)
-                        continue
+                        continue  # timeout / socket issue -> loop lagi
+                    detections = json.loads(result)
+                    if (detections and isinstance(detections, list)
+                            and 'start_time' in detections[0]):
+                        now = time.time()
+                        latency_ms = (now - detections[0]['start_time']) * 1000.0
+                        print(f"Latency: {latency_ms:.2f} ms")
+                    with self.detections_lock:
+                        self.detections.append(detections)
             except Exception as e:
                 if self.running:
                     print(f"Error receiving detections: {e}")
@@ -127,7 +95,7 @@ class CameraClient:
             detections = self.detections[-1]
         for det in detections:
             try:
-                x, y, w, h = map(int, (det['x'], det['y'], det['w'], det['h']))
+                x, y, w, h = det['x'], det['y'], det['w'], det['h']
                 label = det.get('label', '')
                 conf = det.get('confidence', 0)
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
@@ -142,34 +110,20 @@ class CameraClient:
                 continue
         return frame
 
-    def frame_should_send(self, frame_bgr):
-        # Compute motion on downscaled grayscale (very cheap)
-        small = cv2.resize(frame_bgr, self.motion_downscale, interpolation=cv2.INTER_LINEAR)
-        gray_small = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-        if self.prev_sent_gray_small is None:
-            self.prev_sent_gray_small = gray_small
+    def frame_should_send(self, gray_frame):
+        # Pertama kali pasti kirim
+        if self.prev_sent_gray is None:
+            self.prev_sent_gray = gray_frame
             return True
-        diff = cv2.absdiff(self.prev_sent_gray_small, gray_small)
-        mean_diff = float(diff.mean())
+        # Hitung perbedaan rata-rata
+        diff = cv2.absdiff(self.prev_sent_gray, gray_frame)
+        mean_diff = diff.mean()
+        # Normalisasi kasar: jika perbedaan intensitas > threshold persen (skala 0-255)
         percent = (mean_diff / 255.0) * 100.0
         if percent >= self.motion_threshold:
-            self.prev_sent_gray_small = gray_small
+            self.prev_sent_gray = gray_frame
             return True
         return False
-
-    def adjust_quality_based_on_send(self, send_time):
-        # EMA untuk waktu kirim
-        if self.send_time_ema is None:
-            self.send_time_ema = send_time
-        else:
-            self.send_time_ema = (1 - self.ema_alpha) * self.send_time_ema + self.ema_alpha * send_time
-        # jika pengiriman lambat (lebih dari interval send), turunkan quality sedikit
-        target = 1.0 / max(1, self.send_fps)
-        if self.send_time_ema > target * 0.8:
-            self.jpeg_quality = max(self.min_quality, int(self.jpeg_quality * 0.9))
-        else:
-            # kalau masih cepat, naikkan sedikit ke limit
-            self.jpeg_quality = min(self.max_quality, int(self.jpeg_quality * 1.05))
 
     def sender_loop(self):
         send_interval = 1.0 / max(1, self.send_fps)
@@ -178,21 +132,16 @@ class CameraClient:
             frame = None
             with self.latest_frame_lock:
                 if self.latest_frame is not None:
-                    # gunakan reference copy minimal
                     frame = self.latest_frame.copy()
+
             if frame is not None and self.ws and self.ws.connected:
-                if self.frame_should_send(frame):
-                    # encode ke jpeg bytes (langsung)
-                    jpeg_bytes = self.encode_frame_bytes(frame, self.jpeg_quality)
-                    if jpeg_bytes:
-                        payload = self._build_payload(jpeg_bytes)
+                # Motion check
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                if self.frame_should_send(gray):
+                    encoded = self.encode_frame(frame)
+                    if encoded:
                         try:
-                            send_start = time.time()
-                            # kirim sebagai binary
-                            self.ws.send(payload, opcode=ABNF.OPCODE_BINARY)
-                            send_time = time.time() - send_start
-                            # adaptif quality
-                            self.adjust_quality_based_on_send(send_time)
+                            self.ws.send(encoded)
                         except Exception as e:
                             print(f"Failed to send frame: {e}")
             # Sleep sisa waktu
@@ -206,12 +155,16 @@ class CameraClient:
             return
         if not self.start_camera():
             return
+
         self.running = True
+
         recv_thread = threading.Thread(target=self.receive_detections, daemon=True)
         send_thread = threading.Thread(target=self.sender_loop, daemon=True)
         recv_thread.start()
         send_thread.start()
+
         display_interval = 1.0 / max(1, self.display_fps)
+
         try:
             while self.running:
                 loop_start = time.time()
@@ -219,22 +172,30 @@ class CameraClient:
                 if not ret:
                     print("Failed to capture frame")
                     break
-                # Resize sekali (dipakai untuk kirim & overlay)
+
+                # Resize sekali (dipakai untuk kirim & display)
                 frame_resized = cv2.resize(frame, (self.resize_w, self.resize_h), interpolation=cv2.INTER_LINEAR)
+
+                # Update latest frame tanpa blocking lama
                 with self.latest_frame_lock:
                     self.latest_frame = frame_resized
-                # Untuk display, overlay detections pada salinan
+
+                # Copy untuk display + overlay (tidak ganggu yang akan dikirim)
                 display_frame = frame_resized.copy()
                 display_frame = self.draw_detections(display_frame)
-                # kembalikan ke ukuran asli untuk display (opsional)
                 display_frame = cv2.resize(display_frame, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_LINEAR)
+
                 cv2.imshow("Robot AI Vision", display_frame)
+
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
+
+                # Jaga FPS display
                 elapsed = time.time() - loop_start
                 sleep_left = display_interval - elapsed
                 if sleep_left > 0:
                     time.sleep(sleep_left)
+
         except KeyboardInterrupt:
             print("Interrupted by user")
         finally:
@@ -249,12 +210,13 @@ class CameraClient:
                     pass
             cv2.destroyAllWindows()
 
+
 if __name__ == "__main__":
     client = CameraClient(
         "ws://ai-server.yukebrillianth.my.id/ws",
         capture_index=2,
         display_fps=30,
-        send_fps=30,
+        send_fps=10,
         width=640,
         height=360,
         jpeg_quality=20,
