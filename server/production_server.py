@@ -39,6 +39,7 @@ thread_pool = ThreadPoolExecutor(max_workers=8)
 class ModelManager:
     def __init__(self):
         self.models = {}
+        self.model_types = {}
         self.load_default_models()
     
     def load_default_models(self):
@@ -46,72 +47,67 @@ class ModelManager:
         # Load YOLO models
         try:
             self.models["yolo_yolo11m"] = YOLO("yolo11m.pt")
+            self.model_types["yolo_yolo11m"] = "yolo"
             logger.info("YOLOv11m model loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load YOLOv11m model: {e}")
         
         try:
             self.models["yolo_yolov8n"] = YOLO("yolov8n.pt")
+            self.model_types["yolo_yolov8n"] = "yolo"
             logger.info("YOLOv8n model loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load YOLOv8n model: {e}")
         
         try:
             self.models["yolo_yolov8m"] = YOLO("yolov8m.pt")
+            self.model_types["yolo_yolov8m"] = "yolo"
             logger.info("YOLOv8m model loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load YOLOv8m model: {e}")
         
         # Load MediaPipe models
         try:
-            self.models["mediapipe_pose"] = {
-                'model': mp.solutions.pose.Pose(
-                    static_image_mode=False,
-                    model_complexity=2,
-                    enable_segmentation=False,
-                    min_detection_confidence=0.5
-                ),
-                'type': 'pose'
-            }
+            self.models["mediapipe_pose"] = mp.solutions.pose.Pose(
+                static_image_mode=False,
+                model_complexity=2,
+                enable_segmentation=False,
+                min_detection_confidence=0.5
+            )
+            self.model_types["mediapipe_pose"] = "mediapipe"
             logger.info("MediaPipe pose model loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load MediaPipe pose model: {e}")
         
         try:
-            self.models["mediapipe_hands"] = {
-                'model': mp.solutions.hands.Hands(
-                    static_image_mode=False,
-                    max_num_hands=2,
-                    min_detection_confidence=0.5,
-                    min_tracking_confidence=0.5
-                ),
-                'type': 'hands'
-            }
+            self.models["mediapipe_hands"] = mp.solutions.hands.Hands(
+                static_image_mode=False,
+                max_num_hands=2,
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5
+            )
+            self.model_types["mediapipe_hands"] = "mediapipe"
             logger.info("MediaPipe hands model loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load MediaPipe hands model: {e}")
         
         try:
-            self.models["mediapipe_objects"] = {
-                'model': mp.solutions.objectron.Objectron(
-                    static_image_mode=False,
-                    max_num_objects=5,
-                    model_name='Shoe'
-                ),
-                'type': 'objectron'
-            }
+            self.models["mediapipe_objects"] = mp.solutions.objectron.Objectron(
+                static_image_mode=False,
+                max_num_objects=5,
+                model_name='Shoe'
+            )
+            self.model_types["mediapipe_objects"] = "mediapipe"
             logger.info("MediaPipe objectron model loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load MediaPipe objectron model: {e}")
         
         try:
-            self.models["mediapipe_face"] = {
-                'model': mp.solutions.face_detection.FaceDetection(
-                    model_selection=0,
-                    min_detection_confidence=0.5
-                ),
-                'type': 'face'
-            }
+            self.models["mediapipe_face"] = mp.solutions.face_detection.FaceDetection(
+                model_selection=0,
+                min_detection_confidence=0.5
+            )
+            self.model_types["mediapipe_face"] = "mediapipe"
             logger.info("MediaPipe face detection model loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load MediaPipe face detection model: {e}")
@@ -119,6 +115,10 @@ class ModelManager:
     def get_model(self, model_name: str):
         """Get model by name"""
         return self.models.get(model_name)
+    
+    def get_model_type(self, model_name: str):
+        """Get model type by name"""
+        return self.model_types.get(model_name)
     
     def list_models(self):
         """Get list of available models"""
@@ -242,12 +242,24 @@ def convert_mediapipe_results_to_detections(results, model_name: str, include_st
     """
     Convert MediaPipe results to list of detection dicts based on the model type.
     """
-    model_data = model_manager.get_model(model_name)
-    if model_data is None:
+    model_obj = model_manager.get_model(model_name)
+    if model_obj is None:
         logger.error(f"Model {model_name} not found in model manager")
         return []
     
-    model_type = model_data['type']
+    # Determine the model type based on the model name
+    if 'pose' in model_name:
+        model_type = 'pose'
+    elif 'hands' in model_name:
+        model_type = 'hands' 
+    elif 'objects' in model_name:
+        model_type = 'objectron'
+    elif 'face' in model_name:
+        model_type = 'face'
+    else:
+        logger.error(f"Unknown MediaPipe model type for {model_name}")
+        return []
+    
     detections: List[Dict[str, Any]] = []
     
     if model_type == 'pose' and results.pose_landmarks:
@@ -351,17 +363,8 @@ async def run_mediapipe_inference(frame_bgr: np.ndarray, model_name: str) -> Any
     
     # Convert BGR to RGB for MediaPipe
     frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-    # Run MediaPipe inference based on model type
-    if model_data['type'] == 'pose':
-        results = await asyncio.to_thread(model.process, model, frame_rgb)
-    elif model_data['type'] == 'hands':
-        results = await asyncio.to_thread(model.process, model, frame_rgb)
-    elif model_data['type'] == 'objectron':
-        results = await asyncio.to_thread(model.process, model, frame_rgb)
-    elif model_data['type'] == 'face':
-        results = await asyncio.to_thread(model.process, model, frame_rgb)
-    else:
-        raise ValueError(f"Unsupported MediaPipe model type: {model_data['type']}")
+    # Run MediaPipe inference (the model object itself is used to process)
+    results = await asyncio.to_thread(model.process, frame_rgb)
         
     return results
 
