@@ -10,6 +10,7 @@ ENV MPLCONFIGDIR=/app/.cache/matplotlib
 ENV MEDIAPIPE_MODEL_PATH=/app/.cache/mediapipe
 ENV ULTRALYTICS_SETTINGS=/app/.cache/ultralytics/settings.json
 ENV TMPDIR=/app/.cache
+RUN useradd -m appuser && chown -R appuser:appuser /app
 RUN mkdir -p /app/.cache/mediapipe /app/.cache/ultralytics && chown -R appuser:appuser /app/.cache
 
 # -------- System Dependencies --------
