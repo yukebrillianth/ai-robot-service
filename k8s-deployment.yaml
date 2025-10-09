@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-vision-server
+  labels:
+    app: ai-vision-server
+spec:
+  replicas: 1  # Start with 1, scale based on demand
+  selector:
+    matchLabels:
+      app: ai-vision-server
+  template:
+    metadata:
+      labels:
+        app: ai-vision-server
+    spec:
+      containers:
+      - name: ai-vision-server
+        image: ai-vision-server:latest  # Replace with your image name
+        ports:
+        - containerPort: 8000
+          name: http
+        resources:
+          requests:
+            cpu: "2"
+            memory: "4Gi"
+            nvidia.com/gpu: 1
+          limits:
+            cpu: "8"
+            memory: "16Gi"
+            nvidia.com/gpu: 1  # H200 GPU
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        - name: WORKERS
+          value: "1"  # For GPU inference, better to use 1 worker with async processing
+        - name: TIMEOUT_KEEP_ALIVE
+          value: "300"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        volumeMounts:
+        - name: models-storage
+          mountPath: /app/models
+          subPath: models
+      volumes:
+      - name: models-storage
+        persistentVolumeClaim:
+          claimName: models-pvc
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-vision-server-service
+  labels:
+    app: ai-vision-server
+spec:
+  selector:
+    app: ai-vision-server
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: LoadBalancer  # Change to NodePort or ClusterIP based on your needs
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: models-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
