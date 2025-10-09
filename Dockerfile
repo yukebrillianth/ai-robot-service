@@ -1,77 +1,58 @@
-# Use NVIDIA PyTorch base image with CUDA support for H200
 FROM pytorch/pytorch:2.3.1-cuda12.1-cudnn8-devel
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
+# -------- Environment Setup --------
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+# ENV TORCH_CUDA_ARCH_LIST="8.9"
+ENV FORCE_CUDA="1"
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    pkg-config \
-    libavcodec-dev \
-    libavformat-dev \
-    libswscale-dev \
-    libv4l-dev \
-    libxvidcore-dev \
-    libx264-dev \
-    libgtk-3-dev \
-    libatlas-base-dev \
-    gfortran \
-    libhdf5-dev \
-    libhdf5-serial-dev \
-    libhdf5-103 \
-    libqt5core5a \
-    libqt5gui5 \
-    libqt5widgets5 \
-    libqt5test5 \
-    libgstreamer-plugins-base1.0-dev \
-    python3-dev \
-    python3-pip \
-    python3-setuptools \
-    python3-wheel \
-    git \
-    wget \
-    curl \
+# -------- System Dependencies --------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake git curl wget pkg-config \
+    libavcodec-dev libavformat-dev libswscale-dev libv4l-dev \
+    libxvidcore-dev libx264-dev libgtk-3-dev libatlas-base-dev gfortran \
+    libhdf5-dev libqt5core5a libqt5gui5 libqt5widgets5 libgstreamer-plugins-base1.0-dev \
+    python3-dev python3-pip python3-setuptools python3-wheel \
     && rm -rf /var/lib/apt/lists/*
 
-# Create working directory
 WORKDIR /app
 
-# Install Python dependencies
+# -------- Python Packages --------
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir --upgrade pip && \
-    pip3 install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip wheel setuptools && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Install additional dependencies needed for GPU acceleration and MediaPipe
-RUN pip3 install --no-cache-dir \
+RUN pip install --no-cache-dir \
     opencv-python-headless \
-    mediapipe \
-    mediapipe-cpu \
     onnxruntime-gpu \
-    onnxruntime-tools
+    ultralytics \
+    websockets \
+    fastapi \
+    uvicorn[standard]
 
-# Copy the application code
+
+# -------- Copy Project --------
 COPY . .
 
-# Download models if they don't exist (optional - you can mount them as volumes)
-RUN python3 -c "from ultralytics import YOLO; YOLO('yolo11m.pt')" 2>/dev/null || echo "Model download skipped"
-RUN python3 -c "from ultralytics import YOLO; YOLO('yolov8n.pt')" 2>/dev/null || echo "Model download skipped"
-RUN python3 -c "from ultralytics import YOLO; YOLO('yolov8m.pt')" 2>/dev/null || echo "Model download skipped"
+# -------- Download Model Sekali (opsional) --------
+RUN python3 - <<'PY'
+try:
+    from ultralytics import YOLO
+    for m in ['yolo11m.pt', 'yolov8n.pt', 'yolov8m.pt']:
+        YOLO(m)
+except Exception as e:
+    print(f"⚠️  Model download skipped: {e}")
+PY
 
-# Create non-root user for security
+# -------- Non-root User --------
 RUN groupadd -r appuser && useradd -r -g appuser -m -s /bin/bash appuser
 RUN chown -R appuser:appuser /app
 USER appuser
 
-# Expose port
+# -------- Port & Health Check --------
 EXPOSE 8000
+HEALTHCHECK CMD curl -f http://localhost:8000/health || exit 1
 
-# Set up health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-# Run the application
+# -------- Default Command --------
 CMD ["python", "server/production_server.py"]
