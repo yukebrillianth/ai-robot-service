@@ -10,8 +10,6 @@ ENV MPLCONFIGDIR=/app/.cache/matplotlib
 ENV MEDIAPIPE_MODEL_PATH=/app/.cache/mediapipe
 ENV ULTRALYTICS_SETTINGS=/app/.cache/ultralytics/settings.json
 ENV TMPDIR=/app/.cache
-RUN useradd -m appuser && chown -R appuser:appuser /app
-RUN mkdir -p /app/.cache/mediapipe /app/.cache/ultralytics && chown -R appuser:appuser /app/.cache
 
 # -------- System Dependencies --------
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,6 +21,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# -------- Create Cache Directories --------
+RUN useradd -m appuser && chown -R appuser:appuser /app
+RUN mkdir -p /app/.cache/mediapipe /app/.cache/ultralytics && chown -R appuser:appuser /app/.cache
 
 # -------- Python Packages --------
 COPY requirements.txt .
