@@ -6,6 +6,11 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 # ENV TORCH_CUDA_ARCH_LIST="8.9"
 ENV FORCE_CUDA="1"
+ENV MPLCONFIGDIR=/app/.cache/matplotlib
+ENV MEDIAPIPE_MODEL_PATH=/app/.cache/mediapipe
+ENV ULTRALYTICS_SETTINGS=/app/.cache/ultralytics/settings.json
+ENV TMPDIR=/app/.cache
+RUN mkdir -p /app/.cache/mediapipe /app/.cache/ultralytics && chown -R appuser:appuser /app/.cache
 
 # -------- System Dependencies --------
 RUN apt-get update && apt-get install -y --no-install-recommends \
