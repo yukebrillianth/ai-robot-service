@@ -4,7 +4,6 @@ FROM pytorch/pytorch:2.3.1-cuda12.1-cudnn8-devel
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-# ENV TORCH_CUDA_ARCH_LIST="8.9"
 ENV FORCE_CUDA="1"
 ENV MPLCONFIGDIR=/app/.cache/matplotlib
 ENV MEDIAPIPE_MODEL_PATH=/app/.cache/mediapipe
@@ -22,16 +21,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# -------- Create Cache Directories --------
-RUN useradd -m appuser && chown -R appuser:appuser /app
-RUN mkdir -p /app/.cache/mediapipe /app/.cache/ultralytics && chown -R appuser:appuser /app/.cache
+# -------- Create User & Cache Directories --------
+RUN groupadd -r appuser && useradd -r -g appuser -m -s /bin/bash appuser && \
+    mkdir -p /app/.cache/mediapipe /app/.cache/ultralytics && \
+    chown -R appuser:appuser /app
 
 # -------- Python Packages --------
 COPY requirements.txt .
 RUN pip install --upgrade pip wheel setuptools && \
-    pip install --no-cache-dir -r requirements.txt
-
-RUN pip install --no-cache-dir \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir \
     opencv-python-headless \
     onnxruntime-gpu \
     ultralytics \
@@ -39,11 +38,10 @@ RUN pip install --no-cache-dir \
     fastapi \
     uvicorn[standard]
 
-
 # -------- Copy Project --------
 COPY . .
 
-# -------- Download Model Sekali (opsional) --------
+# -------- Optional: Pre-download YOLO models --------
 RUN python3 - <<'PY'
 try:
     from ultralytics import YOLO
@@ -53,9 +51,7 @@ except Exception as e:
     print(f"⚠️  Model download skipped: {e}")
 PY
 
-# -------- Non-root User --------
-RUN groupadd -r appuser && useradd -r -g appuser -m -s /bin/bash appuser
-RUN chown -R appuser:appuser /app
+# -------- Switch to Non-root User --------
 USER appuser
 
 # -------- Port & Health Check --------
