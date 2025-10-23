@@ -5,7 +5,7 @@ metadata:
   labels:
     app: ai-vision-server
 spec:
-  replicas: 1  # Start with 1, scale based on demand
+  replicas: 1
   selector:
     matchLabels:
       app: ai-vision-server
@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: ai-vision-server
-        image: ai-vision-server:latest  # Replace with your image name
+        image: ai-vision-server:latest
         ports:
         - containerPort: 8000
           name: http
@@ -35,7 +35,7 @@ spec:
         - name: CUDA_VISIBLE_DEVICES
           value: "0"
         - name: WORKERS
-          value: "1"  # For GPU inference, better to use 1 worker with async processing
+          value: "1"
         - name: TIMEOUT_KEEP_ALIVE
           value: "300"
         livenessProbe:
@@ -78,7 +78,7 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 8000
-  type: LoadBalancer  # Change to NodePort or ClusterIP based on your needs
+  type: LoadBalancer
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
