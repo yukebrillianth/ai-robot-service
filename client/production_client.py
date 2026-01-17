@@ -3,11 +3,11 @@ import struct
 import threading
 import time
 from collections import deque
-from typing import Literal, Dict, Any, Optional
+from typing import Any, Dict, Literal, Optional
 
 import cv2
 import numpy as np
-from websocket import WebSocket, ABNF
+from websocket import ABNF, WebSocket
 
 # Type aliases
 MODEL_TYPE = Literal["yolo", "mediapipe"]
@@ -360,15 +360,13 @@ class ProductionClient:
             return {}
 
 
-if __name__ == "__main__":
-    # Example usage with different model options
-    
+if __name__ == "__main__":    
     # You can change these parameters based on your needs
     client = ProductionClient(
-        server_url="ws://localhost:8000/ws",  # Update this to your server address
+        server_url="ws://10.7.101.250:8000/ws",  # Update this to your server address
         model_type="yolo",  # or "mediapipe"
         model_name="yolo_yolo11m",  # or "mediapipe_pose", "mediapipe_hands", etc.
-        capture_index=0,  # Camera index (0 for default, 2 for external USB camera)
+        capture_index=2,  # Camera index (0 for default, 2 for external USB camera)
         display_fps=30,
         send_fps=10,
         width=640,
@@ -377,10 +375,9 @@ if __name__ == "__main__":
         motion_threshold=3.0
     )
     
-    # Optionally, you can list available models before starting
     print("Available models:")
-    # client.list_available_models()  # Call when connected in real usage
+    client.list_available_models()  # Call when connected in real usage
     
     print("Starting client...")
-    print("Press 'q' to quit, 'm' to switch between YOLO and MediaPipe models")
+    # print("Press 'q' to quit, 'm' to switch between YOLO and MediaPipe models")
     client.run()

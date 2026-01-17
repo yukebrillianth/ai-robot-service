@@ -10,4 +10,4 @@ torchaudio
 ultralytics
 pydantic
 mediapipe
-onnxruntime-gpu
+# onnxruntime-gpu
