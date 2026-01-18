@@ -7,21 +7,38 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
+import torch
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from ultralytics import YOLO
 
 app = FastAPI()
 
+# GPU Detection
+def get_device():
+    if torch.cuda.is_available():
+        device = "cuda"
+        gpu_name = torch.cuda.get_device_name(0)
+        print(f"✅ GPU detected: {gpu_name}")
+        print(f"   CUDA version: {torch.version.cuda}")
+        print(f"   PyTorch CUDA: {torch.cuda.is_available()}")
+    else:
+        device = "cpu"
+        print("⚠️ No GPU detected, using CPU (will be slow!)")
+    return device
+
+DEVICE = get_device()
+
 # Load model (cek di /app/models dulu, lalu fallback ke current dir)
 MODEL_PATH = os.getenv("MODEL_PATH", "/app/models/yolo11m.pt")
 if not os.path.exists(MODEL_PATH):
     MODEL_PATH = "yolo11m.pt"  # fallback untuk development lokal
-    
-DEVICE = os.getenv("DEVICE", None)  # None -> ultralytics auto (GPU jika tersedia)
-print(f"Loading model from: {MODEL_PATH}")
-model = YOLO(MODEL_PATH)  # menggunakan default device atau set environment CUDA_VISIBLE_DEVICES
-print("Model loaded.")
+
+print(f"Loading model from: {MODEL_PATH} on device: {DEVICE}")
+model = YOLO(MODEL_PATH)
+# Eksplisit set device untuk model
+model.to(DEVICE)
+print(f"✅ Model loaded on {DEVICE}")
 
 # Utilities
 
