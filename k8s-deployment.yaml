@@ -1,92 +1,120 @@
+# -------------------------------------------------------------------------
+# 1. SERVICE
+# -------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-robot-service
+  namespace: robot-ai-its
+  labels:
+    app: ai-robot
+spec:
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+  selector:
+    app: ai-robot
+  type: ClusterIP # Internal only, akses luar via Route
+
+---
+# -------------------------------------------------------------------------
+# 2. DEPLOYMENT
+# -------------------------------------------------------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ai-vision-server
-  labels:
-    app: ai-vision-server
+  name: ai-robot-service
+  namespace: robot-ai-its
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ai-vision-server
+      app: ai-robot
   template:
     metadata:
       labels:
-        app: ai-vision-server
+        app: ai-robot
     spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+
+      imagePullSecrets:
+        - name: ghcr-secret
+
       containers:
-      - name: ai-vision-server
-        image: ai-vision-server:latest
-        ports:
-        - containerPort: 8000
-          name: http
-        resources:
-          requests:
-            cpu: "2"
-            memory: "4Gi"
-            nvidia.com/gpu: 1
-          limits:
-            cpu: "8"
-            memory: "16Gi"
-            nvidia.com/gpu: 1  # H200 GPU
-        env:
-        - name: PYTHONUNBUFFERED
-          value: "1"
-        - name: CUDA_VISIBLE_DEVICES
-          value: "0"
-        - name: WORKERS
-          value: "1"
-        - name: TIMEOUT_KEEP_ALIVE
-          value: "300"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 30
-          timeoutSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 10
-          periodSeconds: 10
-          timeoutSeconds: 5
-        volumeMounts:
-        - name: models-storage
-          mountPath: /app/models
-          subPath: models
+        - name: robot-container
+          image: image-registry.openshift-image-registry.svc:5000/robot-ai-its/ai-robot-service:latest
+          imagePullPolicy: IfNotPresent
+
+          env:
+            - name: YOLO_OFFLINE
+              value: "True"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+
+          ports:
+            - containerPort: 8000
+              name: ws-port
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+              memory: "16Gi"
+              cpu: "4"
+            requests:
+              nvidia.com/gpu: 1
+              memory: "8Gi"
+              cpu: "2"
+
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: cache-vol
+              mountPath: /app/.cache
+
       volumes:
-      - name: models-storage
-        persistentVolumeClaim:
-          claimName: models-pvc
-      tolerations:
-      - key: nvidia.com/gpu
-        operator: Exists
-        effect: NoSchedule
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: cache-vol
+          emptyDir: {}
+
 ---
-apiVersion: v1
-kind: Service
+# -------------------------------------------------------------------------
+# 3. ROUTE
+# -------------------------------------------------------------------------
+apiVersion: route.openshift.io/v1
+kind: Route
 metadata:
-  name: ai-vision-server-service
-  labels:
-    app: ai-vision-server
+  name: ai-robot-route
+  namespace: robot-ai-its
+  annotations:
+    # Timeout lebih tinggi untuk WebSocket streaming (5 menit)
+    haproxy.router.openshift.io/timeout: 300s
+    # Enable WebSocket support
+    haproxy.router.openshift.io/balance: source
 spec:
-  selector:
-    app: ai-vision-server
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 8000
-  type: LoadBalancer
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: models-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 10Gi
+  # Route ini akan menghasilkan URL internal seperti:
+  # ai-robot-route-robot-ai-its.apps.cluster-name.domain.local
+  to:
+    kind: Service
+    name: ai-robot-service
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Allow

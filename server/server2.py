@@ -1,8 +1,9 @@
 import asyncio
 import json
+import os
 import struct
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -12,17 +13,20 @@ from ultralytics import YOLO
 
 app = FastAPI()
 
-# Load model (sesuaikan path / device jika perlu)
-MODEL_PATH = "yolo11m.pt"  # ganti sesuai model Anda
-DEVICE = None  # None -> ultralytics auto (GPU jika tersedia)
-print("Loading model...")
+# Load model (cek di /app/models dulu, lalu fallback ke current dir)
+MODEL_PATH = os.getenv("MODEL_PATH", "/app/models/yolo11m.pt")
+if not os.path.exists(MODEL_PATH):
+    MODEL_PATH = "yolo11m.pt"  # fallback untuk development lokal
+    
+DEVICE = os.getenv("DEVICE", None)  # None -> ultralytics auto (GPU jika tersedia)
+print(f"Loading model from: {MODEL_PATH}")
 model = YOLO(MODEL_PATH)  # menggunakan default device atau set environment CUDA_VISIBLE_DEVICES
 print("Model loaded.")
 
 # Utilities
 
 
-def parse_binary_payload(payload: bytes) -> (Dict[str, Any], bytes):
+def parse_binary_payload(payload: bytes) -> Tuple[Dict[str, Any], bytes]:
     """
     Payload format:
       4-byte big-endian unsigned int = header_length (N)

@@ -1,30 +1,39 @@
-FROM nvcr.io/nvidia/pytorch:24.02-py3
+# =============================================================================
+# Dockerfile untuk NVIDIA GH200 (ARM64/aarch64) + OpenShift
+# =============================================================================
+
+# Base image ARM64 untuk GH200 Grace Hopper
+# Menggunakan pytorch image yang support ARM64 (igpu = integrated GPU untuk Grace Hopper)
+FROM nvcr.io/nvidia/pytorch:24.05-py3-igpu
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     MPLCONFIGDIR=/app/.cache/matplotlib \
     ULTRALYTICS_SETTINGS=/app/.cache/ultralytics/settings.json \
+    YOLO_OFFLINE=True \
     TMPDIR=/app/.cache
 
-# Instal system dependencies yang diperlukan OpenCV & Ultralytics
+# Install system dependencies yang diperlukan OpenCV & Ultralytics
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake git curl wget pkg-config \
+    libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev \
     libavcodec-dev libavformat-dev libswscale-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Buat folder cache di awal agar permission benar
-RUN mkdir -p /app/.cache/matplotlib /app/.cache/ultralytics /app/.cache/mediapipe
+RUN mkdir -p /app/.cache/matplotlib /app/.cache/ultralytics /app/.cache/mediapipe /app/models
 
 COPY requirements.txt .
 
 # Instalasi Python packages
+# PENTING: JANGAN uninstall opencv dari base image NVIDIA
+# Base image sudah punya opencv yang compatible dengan CUDA + arsitektur ARM64
 RUN pip install --no-cache-dir --upgrade pip wheel setuptools && \
+    pip install --no-cache-dir --no-deps ultralytics && \
     pip install --no-cache-dir -r requirements.txt && \
-    pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless && \
-    pip install --no-cache-dir opencv-python-headless==4.9.0.80 && \
     rm -rf /root/.cache/pip
 
 COPY . .
@@ -32,12 +41,17 @@ COPY . .
 # Fix permission untuk OpenShift
 RUN chgrp -R 0 /app && chmod -R g+rwX /app
 
-# Download model saat build time
-RUN python3 -c "from ultralytics import YOLO; YOLO('yolo11m.pt')"
+# Download model saat build time (offline mode sudah aktif via ENV)
+RUN python3 -c "from ultralytics import YOLO; YOLO('yolo11m.pt')" && \
+    mv yolo11m.pt /app/models/ 2>/dev/null || true
 
 # USER 1001 sesuai standar keamanan OpenShift
 USER 1001
+
 EXPOSE 8000
-HEALTHCHECK CMD curl -f http://localhost:8000/health || exit 1
+
+# Healthcheck untuk readiness/liveness probe
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
 CMD ["python", "server/server2.py"]
