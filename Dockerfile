@@ -1,11 +1,11 @@
 # =============================================================================
-# Dockerfile untuk NVIDIA GH200 (ARM64/aarch64) + OpenShift
+# Dockerfile untuk NVIDIA GH200 (ARM64 Grace + Hopper GPU sm_90)
 # =============================================================================
-
-# Base image ARM64 untuk GH200 Grace Hopper dengan support sm_90 (Hopper)
-# PyTorch 2.6 + CUDA 12.6.3 + cuDNN 9.6 + TensorRT 10.7
-# Lihat: https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-24-12.html
-FROM nvcr.io/nvidia/pytorch:24.12-py3-igpu
+# 
+# 24.12-py3 tersedia untuk ARM64 dan include sm_90 (Hopper) support!
+# Ini solusi yang tepat untuk GH200
+#
+FROM nvcr.io/nvidia/pytorch:24.12-py3
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -30,9 +30,7 @@ RUN mkdir -p /app/.cache/matplotlib /app/.cache/ultralytics /app/.cache/mediapip
 
 COPY requirements.txt .
 
-# Instalasi Python packages
-# PENTING: JANGAN uninstall opencv dari base image NVIDIA
-# Base image sudah punya opencv yang compatible dengan CUDA + arsitektur ARM64
+# Install Python packages (keep base image PyTorch, just add ultralytics)
 RUN pip install --no-cache-dir --upgrade pip wheel setuptools && \
     pip install --no-cache-dir --no-deps ultralytics && \
     pip install --no-cache-dir -r requirements.txt && \

@@ -14,17 +14,46 @@ from ultralytics import YOLO
 
 app = FastAPI()
 
-# GPU Detection
+# GPU Detection dengan fallback
 def get_device():
-    if torch.cuda.is_available():
-        device = "cuda"
+    device = "cpu"  # default fallback
+    
+    if not torch.cuda.is_available():
+        print("⚠️ CUDA not available, using CPU")
+        return device
+    
+    try:
+        # Test GPU dengan simple operation
         gpu_name = torch.cuda.get_device_name(0)
-        print(f"✅ GPU detected: {gpu_name}")
+        print(f"🔍 GPU detected: {gpu_name}")
         print(f"   CUDA version: {torch.version.cuda}")
-        print(f"   PyTorch CUDA: {torch.cuda.is_available()}")
-    else:
+        
+        # Check compute capability
+        major, minor = torch.cuda.get_device_capability(0)
+        compute_cap = f"{major}.{minor}"
+        print(f"   Compute capability: sm_{major}{minor}")
+        
+        # Test actual CUDA operation
+        test_tensor = torch.zeros(1).cuda()
+        del test_tensor
+        
+        device = "cuda"
+        print(f"✅ GPU ready for inference")
+        
+    except RuntimeError as e:
+        error_msg = str(e)
+        if "sm_90" in error_msg or "CUDA" in error_msg or "cublas" in error_msg.lower():
+            print(f"⚠️ GPU compute capability mismatch!")
+            print(f"   Error: {error_msg[:200]}")
+            print(f"   Falling back to CPU mode")
+            device = "cpu"
+        else:
+            raise e
+    except Exception as e:
+        print(f"⚠️ GPU initialization failed: {e}")
+        print(f"   Falling back to CPU mode")
         device = "cpu"
-        print("⚠️ No GPU detected, using CPU (will be slow!)")
+    
     return device
 
 DEVICE = get_device()
