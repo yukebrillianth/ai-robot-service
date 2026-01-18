@@ -16,9 +16,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TMPDIR=/app/.cache
 
 # Install system dependencies yang diperlukan OpenCV & Ultralytics
+# Ubuntu 24.04: libgl1-mesa-glx diganti dengan libgl1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake git curl wget pkg-config \
-    libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev \
+    libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev \
     libavcodec-dev libavformat-dev libswscale-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
