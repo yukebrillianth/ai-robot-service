@@ -2,9 +2,10 @@
 # Dockerfile untuk NVIDIA GH200 (ARM64/aarch64) + OpenShift
 # =============================================================================
 
-# Base image ARM64 untuk GH200 Grace Hopper
-# Menggunakan pytorch image yang support ARM64 (igpu = integrated GPU untuk Grace Hopper)
-FROM nvcr.io/nvidia/pytorch:24.05-py3-igpu
+# Base image ARM64 untuk GH200 Grace Hopper dengan support sm_90 (Hopper)
+# PyTorch 2.6 + CUDA 12.6.3 + cuDNN 9.6 + TensorRT 10.7
+# Lihat: https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-24-12.html
+FROM nvcr.io/nvidia/pytorch:24.12-py3-igpu
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
