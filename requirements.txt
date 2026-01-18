@@ -4,10 +4,10 @@ websockets
 websocket-client
 opencv-python
 numpy
-torch
-torchvision
-torchaudio
+# torch
+# torchvision
+# torchaudio
 ultralytics
 pydantic
-mediapipe
+# mediapipe
 # onnxruntime-gpu
