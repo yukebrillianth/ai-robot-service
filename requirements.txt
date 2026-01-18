@@ -2,12 +2,6 @@ fastapi
 uvicorn[standard]
 websockets
 websocket-client
-# opencv-python
-numpy
-# torch
-# torchvision
-# torchaudio
+numpy<2.0
 ultralytics
 pydantic
-# mediapipe
-# onnxruntime-gpu

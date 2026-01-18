@@ -23,7 +23,8 @@ COPY requirements.txt .
 # Instalasi Python packages
 RUN pip install --no-cache-dir --upgrade pip wheel setuptools && \
     pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir opencv-python-headless "numpy<2.0" && \
+    pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless && \
+    pip install --no-cache-dir opencv-python-headless==4.9.0.80 && \
     rm -rf /root/.cache/pip
 
 COPY . .
