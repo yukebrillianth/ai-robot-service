@@ -136,6 +136,7 @@ def build_detection_list(results, include_start_time: Optional[float] = None) ->
                 "y": y,
                 "w": w,
                 "h": h,
+                "send_time": time.time()
             }
             if include_start_time is not None:
                 det["start_time"] = include_start_time
