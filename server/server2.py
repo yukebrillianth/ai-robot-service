@@ -98,11 +98,11 @@ def decode_jpeg_bytes(jpeg_bytes: bytes) -> Optional[np.ndarray]:
     return frame
 
 
-def build_detection_list(results, include_start_time: Optional[float] = None) -> List[Dict[str, Any]]:
+def build_detection_list(results, frame_id: Optional[int] = None) -> List[Dict[str, Any]]:
     """
     Convert ultralytics results to list of detection dicts:
     [
-      {"label": str, "confidence": float, "x": int, "y": int, "w": int, "h": int, "start_time": float},
+      {"label": str, "confidence": float, "x": int, "y": int, "w": int, "h": int, "frame_id": int},
       ...
     ]
     """
@@ -137,8 +137,8 @@ def build_detection_list(results, include_start_time: Optional[float] = None) ->
                 "w": w,
                 "h": h,
             }
-            if include_start_time is not None:
-                det["start_time"] = include_start_time
+            if frame_id is not None:
+                det["frame_id"] = frame_id
             detections.append(det)
     return detections
 
@@ -171,7 +171,7 @@ async def websocket_endpoint(websocket: WebSocket):
             data_type = msg.get("type")
             frame = None
             header = {}
-            start_time_header = None
+            frame_id = None  # For request-response correlation
 
             if data_type == "websocket.receive":
                 # prefer bytes if present
@@ -179,15 +179,17 @@ async def websocket_endpoint(websocket: WebSocket):
                     payload = msg["bytes"]
                     try:
                         header, jpeg_bytes = parse_binary_payload(payload)
-                        start_time_header = header.get("start_time")
+                        frame_id = header.get("frame_id")  # Use frame_id for correlation
                         frame = decode_jpeg_bytes(jpeg_bytes)
                     except Exception as e:
                         # If parsing fails, try treat payload as plain jpeg bytes (no header)
                         try:
                             frame = decode_jpeg_bytes(payload)
+                            frame_id = None
                         except Exception:
                             print(f"Failed to parse binary payload: {e}")
                             frame = None
+                            frame_id = None
 
                 elif "text" in msg and msg["text"] is not None:
                     text = msg["text"]
@@ -226,15 +228,17 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_text(json.dumps([]))
                 continue
 
-            # Build detections list and include start_time if available (ONLY client timestamp!)
-            detections = build_detection_list(results, include_start_time=start_time_header)
+            # Build detections list and include frame_id for client correlation
+            detections = build_detection_list(results, frame_id=frame_id)
             
-            # Add processing time info (ONLY duration, not absolute timestamps!)
+            # Add processing time info (duration only, not absolute timestamps!)
             send_time = time.time()
-            if detections and len(detections) > 0:
+            if len(detections) > 0:
                 processing_time_ms = (send_time - receive_time) * 1000.0
                 detections[0]['processing_time_ms'] = processing_time_ms
-                # DO NOT send absolute timestamps (receive_time/send_time) - clock sync issues!
+            elif frame_id is not None:
+                # No detections but we need to return frame_id for timing
+                detections = [{"frame_id": frame_id, "processing_time_ms": (send_time - receive_time) * 1000.0}]
 
             # send back JSON text
             try:
