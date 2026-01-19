@@ -110,7 +110,7 @@ class CameraClient:
                             latency_ms = (now - detections[0]['send_time']) * 1000.0
                             round_trip_ms = (now - detections[0]['start_time']) * 1000.0
                             print(f"Latency: {latency_ms:.2f} ms")
-                            print(f"Round Trip: {round_trip_ms} ms")
+                            print(f"Round Trip: {round_trip_ms:.2f} ms")
                         with self.detections_lock:
                             self.detections.append(detections)
                     except Exception as e:
