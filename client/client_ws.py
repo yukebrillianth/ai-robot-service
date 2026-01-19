@@ -48,11 +48,6 @@ class CameraClient:
         self.send_time_ema = None
         self.ema_alpha = 0.2
 
-        # Frame tracking untuk akurat latency measurement
-        self.frame_id_counter = 0
-        self.pending_frames = {}  # frame_id -> send_timestamp (client clock)
-        self.pending_frames_lock = threading.Lock()
-
     def connect(self):
         try:
             self.ws = WebSocket()
@@ -87,25 +82,12 @@ class CameraClient:
 
     def _build_payload(self, jpeg_bytes):
         # Format: 4-byte BE header_length + header_json + jpeg_bytes
-        # Generate unique frame ID untuk tracking
-        self.frame_id_counter += 1
-        frame_id = self.frame_id_counter
-        send_time = time.time()
-        
-        # Simpan timestamp untuk frame ini
-        with self.pending_frames_lock:
-            self.pending_frames[frame_id] = send_time
-            # Cleanup old pending frames (older than 5 seconds)
-            old_ids = [fid for fid, ts in self.pending_frames.items() if send_time - ts > 5.0]
-            for fid in old_ids:
-                del self.pending_frames[fid]
-        
         meta = {
             "width": self.resize_w,
             "height": self.resize_h,
             "format": "jpeg",
             "jpeg_quality": int(self.jpeg_quality),
-            "frame_id": frame_id  # Kirim frame_id, bukan start_time
+            "start_time": time.time()
         }
         header = json.dumps(meta).encode('utf-8')
         prefix = struct.pack('>I', len(header))
@@ -122,30 +104,13 @@ class CameraClient:
                     # Ditempatkan asumsinya server mengirim JSON teks untuk detections
                     try:
                         detections = json.loads(result)
-                        if detections and isinstance(detections, list) and len(detections) > 0:
+                        if (detections and isinstance(detections, list)
+                                and 'start_time' in detections[0]):
                             now = time.time()
-                            frame_id = detections[0].get('frame_id')
-                            
-                            if frame_id is not None:
-                                # Lookup send time dari pending frames (client clock)
-                                with self.pending_frames_lock:
-                                    send_time = self.pending_frames.pop(frame_id, None)
-                                
-                                if send_time is not None:
-                                    # Round trip murni client-side timing (akurat!)
-                                    round_trip_ms = (now - send_time) * 1000.0
-                                    
-                                    # Processing time dari server (relatif, akurat)
-                                    processing_time_ms = detections[0].get('processing_time_ms', 0)
-                                    
-                                    # Network latency = round_trip - processing
-                                    network_latency_ms = round_trip_ms - processing_time_ms
-                                    
-                                    print(f"\n Latency (Frame #{frame_id}):")
-                                    print(f"   🌐 Network: {network_latency_ms:.1f} ms (send + receive)")
-                                    print(f"   ⚙️  Server: {processing_time_ms:.1f} ms (inference)")
-                                    print(f"   ⏱️  Total:  {round_trip_ms:.1f} ms")
-                        
+                            round_trip_ms = (now - detections[0]['start_time']) * 1000.0
+                            latency_ms = (round_trip_ms - detections[0]['process_duration_ms'])
+                            print(f"Latency: {latency_ms:.2f} ms")
+                            print(f"Round Trip: {round_trip_ms:.2f} ms")
                         with self.detections_lock:
                             self.detections.append(detections)
                     except Exception as e:
