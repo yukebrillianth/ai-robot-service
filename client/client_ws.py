@@ -107,10 +107,21 @@ class CameraClient:
                         if (detections and isinstance(detections, list)
                                 and 'start_time' in detections[0]):
                             now = time.time()
-                            latency_ms = (now - detections[0]['send_time']) * 1000.0
                             round_trip_ms = (now - detections[0]['start_time']) * 1000.0
-                            print(f"Latency: {latency_ms:.2f} ms")
-                            print(f"Round Trip: {round_trip_ms:.2f} ms")
+                            
+                            # If server provides processing time, use it
+                            if 'processing_time_ms' in detections[0]:
+                                processing_time_ms = detections[0]['processing_time_ms']
+                                network_latency_ms = round_trip_ms - processing_time_ms
+                            else:
+                                # Fallback: assume half round trip for network latency
+                                network_latency_ms = round_trip_ms / 2.0
+                                processing_time_ms = round_trip_ms - network_latency_ms
+                            
+                            print(f"\nLatency Breakdown:")
+                            print(f"   Network Latency: {network_latency_ms:.2f} ms (both ways)")
+                            print(f"   Processing Time: {processing_time_ms:.2f} ms")
+                            print(f"   Total Round Trip: {round_trip_ms:.2f} ms")
                         with self.detections_lock:
                             self.detections.append(detections)
                     except Exception as e:

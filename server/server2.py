@@ -165,6 +165,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     try:
         while True:
+            receive_time = time.time()  # Track when we receive the message
             msg = await websocket.receive()
 
             # websocket.receive() returns dict with 'type' and either 'text' or 'bytes'
@@ -228,6 +229,14 @@ async def websocket_endpoint(websocket: WebSocket):
 
             # Build detections list and include start_time if available
             detections = build_detection_list(results, include_start_time=start_time_header or time.time())
+            
+            # Add processing time info
+            send_time = time.time()
+            if detections and len(detections) > 0:
+                processing_time_ms = (send_time - receive_time) * 1000.0
+                detections[0]['processing_time_ms'] = processing_time_ms
+                detections[0]['receive_time'] = receive_time
+                detections[0]['send_time'] = send_time
 
             # send back JSON text
             try:
