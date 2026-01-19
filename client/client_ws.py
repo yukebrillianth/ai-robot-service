@@ -251,7 +251,7 @@ class CameraClient:
 
 if __name__ == "__main__":
     client = CameraClient(
-        "ws://ai-server.yukebrillianth.my.id/ws",
+        "ws://ai-robot-route-robot-ai-its.apps.iohairan.nokia-airan.ioh.com/ws",
         capture_index=2,
         display_fps=30,
         send_fps=30,

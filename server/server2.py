@@ -58,20 +58,17 @@ def get_device():
 
 DEVICE = get_device()
 
-# Load model (cek di /app/models dulu, lalu fallback ke current dir)
 MODEL_PATH = os.getenv("MODEL_PATH", "/app/models/yolo11m.pt")
 if not os.path.exists(MODEL_PATH):
     MODEL_PATH = "yolo11m.pt"  # fallback untuk development lokal
 
 print(f"Loading model from: {MODEL_PATH} on device: {DEVICE}")
 model = YOLO(MODEL_PATH)
-# Eksplisit set device untuk model
+
 model.to(DEVICE)
 print(f"✅ Model loaded on {DEVICE}")
 
 # Utilities
-
-
 def parse_binary_payload(payload: bytes) -> Tuple[Dict[str, Any], bytes]:
     """
     Payload format:

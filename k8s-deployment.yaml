@@ -15,7 +15,7 @@ spec:
       targetPort: 8000
   selector:
     app: ai-robot
-  type: ClusterIP # Internal only, akses luar via Route
+  type: ClusterIP
 
 ---
 # -------------------------------------------------------------------------
@@ -44,7 +44,7 @@ spec:
 
       containers:
         - name: robot-container
-          image: image-registry.openshift-image-registry.svc:5000/robot-ai-its/ai-robot-service:latest
+          image: image-registry.openshift-image-registry.svc:5000/robot-ai-its/ai-robot-service:v1.0.0
           imagePullPolicy: IfNotPresent
 
           env:
@@ -103,13 +103,9 @@ metadata:
   name: ai-robot-route
   namespace: robot-ai-its
   annotations:
-    # Timeout lebih tinggi untuk WebSocket streaming (5 menit)
     haproxy.router.openshift.io/timeout: 300s
-    # Enable WebSocket support
     haproxy.router.openshift.io/balance: source
 spec:
-  # Route ini akan menghasilkan URL internal seperti:
-  # ai-robot-route-robot-ai-its.apps.cluster-name.domain.local
   to:
     kind: Service
     name: ai-robot-service
