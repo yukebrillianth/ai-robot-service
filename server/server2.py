@@ -136,7 +136,6 @@ def build_detection_list(results, include_start_time: Optional[float] = None) ->
                 "y": y,
                 "w": w,
                 "h": h,
-                "send_time": time.time()
             }
             if include_start_time is not None:
                 det["start_time"] = include_start_time
@@ -227,8 +226,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_text(json.dumps([]))
                 continue
 
-            # Build detections list and include start_time if available
-            detections = build_detection_list(results, include_start_time=start_time_header or time.time())
+            # Build detections list and include start_time if available (ONLY client timestamp!)
+            detections = build_detection_list(results, include_start_time=start_time_header)
             
             # Add processing time info (ONLY duration, not absolute timestamps!)
             send_time = time.time()
