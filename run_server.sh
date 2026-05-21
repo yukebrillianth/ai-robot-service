@@ -4,4 +4,5 @@
 source venv/bin/activate
 
 # Run the server
-python server/main.py
+# python server/main.py
+python server/server2.py

@@ -1,10 +1,20 @@
+# Uncomment this for IOH GH200
+# fastapi
+# uvicorn[standard]
+# websockets
+# websocket-client
+# numpy<2.0
+# # ultralytics di-install terpisah dengan --no-deps di Dockerfile
+# # untuk menghindari konflik opencv dengan base image NVIDIA
+# pydantic
+# # Jangan install opencv-python, gunakan yang dari base image NVIDIA
+# # opencv-python-headless
+
 fastapi
 uvicorn[standard]
 websockets
 websocket-client
-numpy<2.0
-# ultralytics di-install terpisah dengan --no-deps di Dockerfile
-# untuk menghindari konflik opencv dengan base image NVIDIA
+numpy
 pydantic
-# Jangan install opencv-python, gunakan yang dari base image NVIDIA
-# opencv-python-headless
+opencv-python
+ultralytics
