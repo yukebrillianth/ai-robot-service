@@ -58,9 +58,9 @@ def get_device():
 
 DEVICE = get_device()
 
-MODEL_PATH = os.getenv("MODEL_PATH", "/app/models/yolo11m.pt")
+MODEL_PATH = os.getenv("MODEL_PATH", "/app/models/yolo26m.pt")
 if not os.path.exists(MODEL_PATH):
-    MODEL_PATH = "yolo11m.pt"  # fallback untuk development lokal
+    MODEL_PATH = "yolo26m.pt"  # fallback untuk development lokal
 
 print(f"Loading model from: {MODEL_PATH} on device: {DEVICE}")
 model = YOLO(MODEL_PATH)
